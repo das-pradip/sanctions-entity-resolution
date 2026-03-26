@@ -1,6 +1,5 @@
 # Learning Journal — Sanctions Entity Resolution
 
----
 
 ## Day 1 — Understanding The Problem
 
@@ -110,3 +109,45 @@ Phase 2: Algorithm survey
 - Blocking — candidate generation
 - ML scoring — binary classification
 - Hybrid pipeline — combining all methods
+
+
+## Day 2 — Levenshtein Distance Algorithm
+
+### What I learned
+
+**Why Levenshtein Distance:**
+- Exact matching returns only True or False — no middle ground
+- Levenshtein measures HOW different two strings are
+- Returns minimum number of single character edits needed:
+  - Substitute: change one character → "Usama" to "Osama"
+  - Insert: add a character
+  - Delete: remove a character
+
+**Key example:**
+- "Abdul Rahman" vs "Abdel Rahman" → distance 1, similarity 0.92
+- One character difference — exact match said False
+- Levenshtein says 92% similar — same person
+
+**Data structures used:**
+- 2D List (Matrix/Grid) — stores subproblem solutions
+- Dynamic Programming — reuses previous solutions
+  instead of recalculating from scratch each time
+- Each cell grid[i][j] = edit distance between
+  first i chars of s1 and first j chars of s2
+- Bottom-right cell = final answer
+
+**Why we normalise:**
+- Raw distance of 2 means different things for short vs long names
+- We divide by longest string length
+- Converts to 0.0 to 1.0 scale — comparable across all names
+
+**Critical insight:**
+- Name similarity alone cannot make a block or clear decision
+- 0.60 similarity = uncertain = needs corroborating evidence
+- Final score must combine: name + DOB + country + passport
+- Missing fields = NULL, excluded from average, not zeroed
+
+**What I will build next:**
+- Phonetic matching — catch names that sound same but spell differently
+- DOB proximity scoring — ±2 year tolerance
+- Combined feature vector — one score from all available fields
