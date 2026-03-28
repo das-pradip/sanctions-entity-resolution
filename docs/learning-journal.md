@@ -258,3 +258,122 @@ Splits names into words, measures word-level overlap
 No single algorithm gets all cases right.
 Hybrid pipeline combining all algorithms is necessary.
 Each algorithm covers the blind spots of the others.
+
+
+---
+
+## Day 3 — Vector Embeddings (Semantic Similarity)
+
+### What embeddings are
+- Convert a name into a list of 384 numbers (a vector)
+- Each number = one dimension of meaning
+- Names with similar meaning are close together in this space
+- Distance between vectors = semantic similarity
+
+### How cosine similarity works
+- Measures the angle between two vectors
+- Small angle = same direction = similar meaning = high score
+- Large angle = different direction = different meaning = low score
+- Formula: cos(θ) = (A · B) / (|A| × |B|)
+- WHY cosine not euclidean: measures direction not magnitude
+
+### Library used
+- sentence-transformers — pre-trained on 1 billion sentence pairs
+- Model: all-MiniLM-L6-v2 — small, fast, free, runs locally
+- Loaded once at startup — takes ~2 seconds
+- Reusing one model object for all comparisons
+
+### Surprising results and why
+Osama Bin Laden vs Usama Bin Ladin → 0.49 (expected ~0.90)
+WHY: Model treats them as two different proper noun tokens
+     seen in different contexts during training
+     Levenshtein (0.87) was better here
+
+Ali Khan vs Ahmed Khan → 0.86 (expected ~0.40)
+WHY: Both South Asian male names appearing in similar
+     contexts in training data — model thinks they are
+     semantically related even though different people
+     This is a FALSE POSITIVE risk
+
+### When embeddings help vs hurt
+STRONG at:
+- Common name variants model learned (Muhammad/Mohammed)
+- Detecting completely unrelated strings
+- Cross-language semantic similarity
+
+WEAK at:
+- Transliterated proper nouns (Osama/Usama)
+- Distinguishing similar-context names (Ali/Ahmed)
+- Unknown aliases with no training data
+
+### The key lesson
+No single algorithm wins alone.
+Each algorithm covers the blind spots of the others.
+Embeddings are one signal among many — not the answer alone.
+
+### Python concepts used
+- numpy (np) — mathematical operations on arrays
+- np.dot() — dot product of two vectors
+- np.linalg.norm() — length of a vector
+- np.clip() — keep values within a range
+- import at module level — load model once, reuse everywhere
+
+---
+
+## Day 3 — Combined Feature Vector Scorer
+
+### What this function does
+Combines all five name algorithms + DOB + country + passport
+into one final confidence score and decision.
+
+### Field weights
+name:     0.40  — important but can be wrong/variant
+passport: 0.25  — strongest single identifier
+dob:      0.20  — useful but often missing or wrong
+country:  0.15  — corroborating signal
+
+### Name algorithm weights
+token_overlap: 0.30  — highest, handles reordering
+levenshtein:   0.25  — strong on char differences
+phonetic:      0.20  — sound variants
+ngram:         0.15  — fills gaps
+embedding:     0.10  — lowest, unreliable on proper nouns
+
+### Decision thresholds
+score ≥ 0.85 → AUTO BLOCK
+score ≥ 0.65 → MANUAL REVIEW
+score < 0.65 → CLEAR
+
+### Key results from testing
+
+Test 1 (Usama/Osama Bin Laden): MANUAL REVIEW (0.78)
+- Name scored only 0.59 — embeddings dragged it down
+- DOB and country both 1.00 — saved the record
+- Passport NULL — excluded not zeroed
+- If zeroed: score 0.586 → CLEAR → sanctioned person walks through
+
+Test 2 (Ali Khan, different passport): MANUAL REVIEW (0.75)
+- Name, DOB, country all 1.00
+- Passport 0.00 — conflicting evidence
+- Human needed: new passport of same person OR different person?
+
+Test 3 (Missing fields): MANUAL REVIEW (0.85)
+- Only name and country available
+- Normalised over available weights only
+- If zeroed: score drops below 0.65 → CLEAR → dangerous
+
+Test 4 (Passport match): AUTO BLOCK (0.89)
+- Passport exact match — strongest signal
+- Corroborated by country and DOB proximity
+- Correct decision
+
+### The NULL-aware scoring proof
+Zeroing missing fields systematically clears sanctioned
+entities who have sparse data on sanctions lists.
+Sanctioned people deliberately keep details sparse.
+NULL-aware scoring is not optional — it is critical.
+
+### What I will build next
+- tests/test_matching.py — formal test cases
+- Phase 3: synthetic dataset with real OFAC/UN/EU structure
+- Phase 4: Precision, Recall, F1 metrics
