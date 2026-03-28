@@ -381,6 +381,296 @@ def embedding_similarity(name1, name2):
     return float(np.clip(score, 0.0, 1.0))
 
 
+
+# ============================================================
+# COMBINED FEATURE VECTOR SCORER
+# ============================================================
+# This is the core of the sanctions matching system.
+# It combines all five algorithms into one confidence score.
+#
+# WHY COMBINE:
+# No single algorithm wins alone. Each covers blind spots
+# of the others. The combined score is more reliable than
+# any individual score.
+#
+# WHY WEIGHTED AVERAGE:
+# Algorithms have different reliability levels.
+# Token overlap and Levenshtein are more reliable
+# than embeddings for sanctions name matching.
+# Weights reflect this — embeddings get lowest weight.
+#
+# DESIGN DECISIONS:
+# 1. Missing fields → NULL, excluded from average
+#    not zeroed out (absence of evidence ≠ no match)
+# 2. Weighted average over AVAILABLE fields only
+# 3. DOB within ±2 years → full score
+# 4. Country exact match → full score
+# 5. Passport exact match → full score (strongest signal)
+
+# Algorithm weights — must sum to 1.0
+# These are starting weights — ML model will improve them later
+NAME_ALGORITHM_WEIGHTS = {
+    'token_overlap': 0.30,   # highest: handles reordering perfectly
+    'levenshtein':   0.25,   # high: strong on char differences
+    'phonetic':      0.20,   # medium: sound variants
+    'ngram':         0.15,   # medium: fills gaps
+    'embedding':     0.10,   # low: unreliable on proper nouns
+}
+
+
+def score_name_similarity(name1, name2):
+    """
+    Runs all five name algorithms and returns a
+    weighted combined name similarity score.
+
+    WHY ALL FIVE:
+    Each algorithm catches what others miss.
+    Levenshtein misses reordering — token overlap catches it.
+    Phonetic misses some variants — N-gram catches them.
+    Combined signal is always stronger.
+
+    Returns:
+    - score: float between 0.0 and 1.0
+    - breakdown: dict showing each algorithm's contribution
+                 so we can explain WHY the score is what it is
+    """
+
+    # Calculate each algorithm's score
+    scores = {
+        'token_overlap': token_overlap_similarity(name1, name2),
+        'levenshtein':   levenshtein_similarity(name1, name2),
+        'phonetic':      phonetic_similarity(name1, name2),
+        'ngram':         jaccard_similarity(name1, name2),
+        'embedding':     embedding_similarity(name1, name2),
+    }
+
+    # Calculate weighted sum
+    # WHY: each score multiplied by its weight
+    # then summed = weighted average
+    weighted_sum = 0.0
+    for algorithm, score in scores.items():
+        weight       = NAME_ALGORITHM_WEIGHTS[algorithm]
+        weighted_sum += score * weight
+
+    return weighted_sum, scores
+
+
+def score_dob(dob1, dob2, tolerance_years=2):
+    """
+    Compares two date of birth values with tolerance.
+
+    WHY ±2 YEARS TOLERANCE:
+    1. Data entry errors are common — clerk types 1970 vs 1971
+    2. Deliberate evasion — sanctioned person gives wrong DOB
+    3. Intelligence uncertainty — OFAC uses "circa 1960"
+    4. Multiple sources may have different values
+
+    WHY RETURN NULL FOR MISSING:
+    If either DOB is unknown, we cannot score this field.
+    Returning 0 would penalise records with missing DOB —
+    systematically letting sanctioned entities with missing
+    data slip through. NULL excludes it from the average.
+
+    Returns:
+    - 1.0 if DOBs match within tolerance
+    - 0.0 if DOBs exist but are too far apart
+    - None if either DOB is missing (excluded from scoring)
+    """
+
+    # Handle missing values
+    # WHY CHECK BOTH: either missing = we cannot compare
+    if dob1 is None or dob2 is None:
+        return None   # NULL — excluded from average
+
+    # Extract year — handle both "1970" and "1970-01-15" formats
+    try:
+        year1 = int(str(dob1)[:4])
+        year2 = int(str(dob2)[:4])
+    except (ValueError, TypeError):
+        return None   # Cannot parse — treat as missing
+
+    difference = abs(year1 - year2)
+
+    if difference <= tolerance_years:
+        return 1.0    # Within tolerance — DOB evidence satisfied
+    else:
+        return 0.0    # Too far apart — DOB evidence contradicts
+
+
+def score_country(country1, country2):
+    """
+    Compares country fields.
+
+    WHY SIMPLE EXACT MATCH:
+    Country names should be standardised during normalisation.
+    If both are present and match — strong corroborating signal.
+    If both are present and don't match — evidence against.
+    If either is missing — NULL, excluded from scoring.
+
+    Returns:
+    - 1.0 if countries match
+    - 0.0 if countries exist but don't match
+    - None if either country is missing
+    """
+    if country1 is None or country2 is None:
+        return None
+
+    # Normalise before comparing
+    c1 = country1.lower().strip()
+    c2 = country2.lower().strip()
+
+    return 1.0 if c1 == c2 else 0.0
+
+
+def score_passport(passport1, passport2):
+    """
+    Compares passport numbers.
+
+    WHY PASSPORT IS THE STRONGEST SIGNAL:
+    A passport number uniquely identifies a document.
+    Exact match is near-certain identity confirmation.
+    Non-match does NOT mean different person —
+    passports expire, people get new ones, use multiple.
+
+    Returns:
+    - 1.0 if passports match exactly
+    - 0.0 if both exist but don't match
+    - None if either is missing
+    """
+    if passport1 is None or passport2 is None:
+        return None
+
+    p1 = str(passport1).upper().strip()
+    p2 = str(passport2).upper().strip()
+
+    return 1.0 if p1 == p2 else 0.0
+
+
+def score_records(record1, record2):
+    """
+    Master scoring function — combines ALL field scores
+    into one final confidence score.
+
+    Takes two records as dictionaries:
+    {
+        'name':     string or None,
+        'dob':      string or None,
+        'country':  string or None,
+        'passport': string or None
+    }
+
+    Returns:
+    - final_score: float between 0.0 and 1.0
+    - explanation: string describing why this score was given
+    - breakdown: dict of all individual scores
+
+    WHY RETURN EXPLANATION:
+    Compliance analysts must be able to answer:
+    "Why did the system say these two records are the same?"
+    We build the reason string here — Phase 7 explainability
+    starts from day one, not as an afterthought.
+    """
+
+    breakdown = {}
+    explanation_parts = []
+
+    # ── Name similarity ──────────────────────────────────
+    # Name is always present — if missing, use empty string
+    name1 = record1.get('name') or ''
+    name2 = record2.get('name') or ''
+
+    if name1 and name2:
+        name_score, name_breakdown = score_name_similarity(name1, name2)
+        breakdown['name'] = name_score
+        breakdown['name_detail'] = name_breakdown
+        explanation_parts.append(f"name similarity {name_score:.2f}")
+    else:
+        breakdown['name'] = None
+
+    # ── DOB similarity ───────────────────────────────────
+    dob_score = score_dob(
+        record1.get('dob'),
+        record2.get('dob')
+    )
+    breakdown['dob'] = dob_score
+
+    if dob_score is not None:
+        explanation_parts.append(f"DOB score {dob_score:.2f}")
+    else:
+        explanation_parts.append("DOB unknown (excluded)")
+
+    # ── Country similarity ───────────────────────────────
+    country_score = score_country(
+        record1.get('country'),
+        record2.get('country')
+    )
+    breakdown['country'] = country_score
+
+    if country_score is not None:
+        explanation_parts.append(f"country score {country_score:.2f}")
+    else:
+        explanation_parts.append("country unknown (excluded)")
+
+    # ── Passport similarity ──────────────────────────────
+    passport_score = score_passport(
+        record1.get('passport'),
+        record2.get('passport')
+    )
+    breakdown['passport'] = passport_score
+
+    if passport_score is not None:
+        explanation_parts.append(f"passport score {passport_score:.2f}")
+    else:
+        explanation_parts.append("passport unknown (excluded)")
+
+    # ── Weighted final score ─────────────────────────────
+    # Field weights — passport is strongest single identifier
+    FIELD_WEIGHTS = {
+        'name':     0.40,   # important but can be wrong
+        'dob':      0.20,   # useful but often missing/wrong
+        'country':  0.15,   # corroborating signal
+        'passport': 0.25,   # strongest single identifier
+    }
+
+    weighted_sum      = 0.0
+    total_weight_used = 0.0
+
+    for field, weight in FIELD_WEIGHTS.items():
+        score = breakdown.get(field)
+
+        if score is not None:
+            # Field has a value — include in average
+            weighted_sum      += score * weight
+            total_weight_used += weight
+        # else: field is NULL — excluded from average
+        # WHY: do not penalise for missing data
+
+    # Normalise by weights actually used
+    # WHY: if passport is missing (weight 0.25 excluded)
+    #      we normalise over remaining 0.75 not 1.0
+    #      otherwise scores are systematically low
+    if total_weight_used == 0:
+        final_score = 0.0
+    else:
+        final_score = weighted_sum / total_weight_used
+
+    # ── Decision ─────────────────────────────────────────
+    if final_score >= 0.85:
+        decision = "AUTO BLOCK"
+    elif final_score >= 0.65:
+        decision = "MANUAL REVIEW"
+    else:
+        decision = "CLEAR"
+
+    # ── Build explanation string ──────────────────────────
+    explanation = (
+        f"Decision: {decision} (score: {final_score:.2f}) | "
+        f"Matched on: {', '.join(explanation_parts)}"
+    )
+
+    return final_score, decision, explanation, breakdown
+
+
 # ============================================================
 # MAIN — RUN ALL TESTS
 # ============================================================
@@ -490,3 +780,86 @@ if __name__ == "__main__":
     for name1, name2 in embedding_pairs:
         score = embedding_similarity(name1, name2)
         print(f"{name1:25} vs {name2:25} → similarity: {score:.2f}")
+
+
+    # --------------------------------------------------------
+    # COMBINED FEATURE VECTOR SCORING TESTS
+    # --------------------------------------------------------
+    print()
+    print("=" * 55)
+    print("COMBINED FEATURE VECTOR SCORING TESTS")
+    print("=" * 55)
+
+    # Test 1: Strong match — same person, small name difference
+    record_sanctions_1 = {
+        'name':     'Usama Bin Laden',
+        'dob':      '1957',
+        'country':  'Saudi Arabia',
+        'passport': None
+    }
+    record_transaction_1 = {
+        'name':     'Osama Bin Ladin',
+        'dob':      '1957',
+        'country':  'Saudi Arabia',
+        'passport': None
+    }
+
+    # Test 2: Same name, completely different person
+    record_sanctions_2 = {
+        'name':     'Ali Khan',
+        'dob':      '1975',
+        'country':  'Pakistan',
+        'passport': 'PK-7734521'
+    }
+    record_transaction_2 = {
+        'name':     'Ali Khan',
+        'dob':      '1975',
+        'country':  'Pakistan',
+        'passport': 'PK-9981234'   # different passport
+    }
+
+    # Test 3: Missing fields — DOB and passport unknown
+    record_sanctions_3 = {
+        'name':     'Abdul Rahman Al-Sudais',
+        'dob':      None,
+        'country':  'Saudi Arabia',
+        'passport': None
+    }
+    record_transaction_3 = {
+        'name':     'Abdel Rahman Al-Sudais',
+        'dob':      '1960',
+        'country':  'Saudi Arabia',
+        'passport': None
+    }
+
+    # Test 4: Passport match — strongest signal
+    record_sanctions_4 = {
+        'name':     'Hassan Al-Turabi',
+        'dob':      '1932',
+        'country':  'Sudan',
+        'passport': 'SD-4421983'
+    }
+    record_transaction_4 = {
+        'name':     'Hasan Al-Turabi',
+        'dob':      '1933',
+        'country':  'Sudan',
+        'passport': 'SD-4421983'   # same passport ← strong signal
+    }
+
+    test_cases = [
+        ("Test 1: Strong name match",
+         record_sanctions_1, record_transaction_1),
+        ("Test 2: Same name, different passport",
+         record_sanctions_2, record_transaction_2),
+        ("Test 3: Missing fields",
+         record_sanctions_3, record_transaction_3),
+        ("Test 4: Passport match",
+         record_sanctions_4, record_transaction_4),
+    ]
+
+    for test_name, rec1, rec2 in test_cases:
+        score, decision, explanation, breakdown = score_records(rec1, rec2)
+        print(f"\n{test_name}")
+        print(f"  Record 1: {rec1}")
+        print(f"  Record 2: {rec2}")
+        print(f"  → {explanation}")      
