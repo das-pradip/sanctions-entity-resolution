@@ -151,3 +151,53 @@ Phase 2: Algorithm survey
 - Phonetic matching — catch names that sound same but spell differently
 - DOB proximity scoring — ±2 year tolerance
 - Combined feature vector — one score from all available fields
+
+---
+
+## Day 2 — Phonetic Matching (Soundex)
+
+### Why Levenshtein alone is not enough
+- Levenshtein compares spelling character by character
+- Muhammad vs Mohammed → Levenshtein: 0.75 (borderline)
+- These names sound identical when spoken
+- A bank clerk spells the same spoken name differently
+  every time — spelling varies, sound does not
+
+### How Soundex works
+Four rules:
+1. Keep first letter unchanged
+2. Remove all vowels after first letter
+3. Replace consonants with sound-group numbers:
+   B,F,P,V → 1   (lip sounds)
+   C,G,J,K,Q,S,X,Z → 2  (throat/hiss sounds)
+   D,T → 3        (tongue sounds)
+   L → 4
+   M,N → 5        (nasal sounds)
+   R → 6
+4. Keep exactly 4 characters, pad with zeros
+
+### Key results
+- Muhammad → M530 | Mohammed → M530 → similarity 1.00
+  Levenshtein said 0.75 — phonetic correctly says 1.00
+- Usama → U250 | Osama → O250 → similarity 0.80
+  First letter differs due to Arabic vowel transliteration
+  Numeric pattern identical — partial credit given
+
+### Critical insight — why combine algorithms
+- No single algorithm wins alone
+- Levenshtein: strong on spelling variants (1-2 char differences)
+- Soundex: strong on sound variants (transliteration)
+- Combined signal is always stronger than either alone
+- This is why we build a hybrid pipeline
+
+### Soundex limitations I know
+- "Yusuf" vs "Joseph" — same name, different languages
+  sound differently → Soundex misses this
+- Very short names (Ali, Omar) — low information in 4 chars
+- This is why we add more algorithms: N-gram, embeddings
+
+### What I will build next
+- Algorithm D: N-gram similarity
+  Splits names into overlapping character chunks
+  Catches partial matches that both Levenshtein and
+  Soundex miss
