@@ -304,3 +304,155 @@ for name1, name2 in phonetic_pairs:
     code2 = soundex(name2)
     score = phonetic_similarity(name1, name2)
     print(f"{name1:12} → {code1}  |  {name2:12} → {code2}  |  similarity: {score:.2f}")
+
+
+
+    # ============================================================
+# ALGORITHM D — N-GRAM SIMILARITY (JACCARD)
+# ============================================================
+# What it does: splits names into character chunks (n-grams)
+#               measures overlap between two sets of chunks
+# When it works: reordered tokens, partial name matches,
+#               spelling variants with shared substrings
+# When it fails: very short names (Ali → only 1 trigram)
+
+def get_ngrams(text, n=3):
+    """
+    Splits a string into overlapping chunks of n characters.
+    
+    WHY N-GRAMS:
+    "Bin Laden" and "Laden Bin" share the same character
+    chunks regardless of word order. N-grams are order-
+    independent — they capture WHAT characters appear,
+    not WHERE they appear.
+    
+    WHY n=3 (trigrams):
+    - n=2 too short: "la" appears in many unrelated names
+    - n=3 balanced: specific enough to be meaningful,
+      flexible enough to handle 1-char spelling differences
+    - n=4 too strict: one spelling difference kills the match
+    
+    Example:
+    get_ngrams("laden") → {"lad", "ade", "den"}
+    """
+    
+    # Normalise first — same reason as always
+    text = text.lower().strip()
+    
+    # Remove spaces for character-level ngrams
+    # WHY: "bin laden" and "laden bin" should produce
+    #      same character chunks regardless of word order
+    text = text.replace(" ", "")
+    
+    # Need at least n characters to make one ngram
+    if len(text) < n:
+        # Return the whole string as one gram
+        # WHY: short names like "Ali" still need representation
+        return {text}
+    
+    # Build the set of ngrams using a set comprehension
+    # WHY SET not LIST:
+    # Sets automatically remove duplicates
+    # "aaa" would give ["aaa","aaa"] as list
+    # but {"aaa"} as set — we want unique chunks only
+    ngrams = set()
+    for i in range(len(text) - n + 1):
+        ngram = text[i:i+n]
+        ngrams.add(ngram)
+    
+    return ngrams
+
+
+def jaccard_similarity(name1, name2, n=3):
+    """
+    Measures overlap between two names using Jaccard formula.
+    
+    Jaccard = |intersection| / |union|
+            = shared ngrams / total unique ngrams
+    
+    WHY JACCARD:
+    It normalises by total unique ngrams — so longer names
+    with more ngrams don't automatically score higher.
+    A short name matching a long name is penalised correctly.
+    
+    Returns score between 0.0 and 1.0
+    """
+    
+    # Get ngram sets for both names
+    ngrams1 = get_ngrams(name1, n)
+    ngrams2 = get_ngrams(name2, n)
+    
+    # Handle empty sets
+    if not ngrams1 or not ngrams2:
+        return 0.0
+    
+    # Intersection — ngrams that appear in BOTH sets
+    # WHY: these are the shared character chunks
+    # Python set operation: & means intersection
+    intersection = ngrams1 & ngrams2
+    
+    # Union — ALL unique ngrams across both sets
+    # WHY: this is our denominator — total possible overlap
+    # Python set operation: | means union
+    union = ngrams1 | ngrams2
+    
+    # Jaccard formula
+    return len(intersection) / len(union)
+
+
+def token_overlap_similarity(name1, name2):
+    """
+    Splits names into words (tokens) and measures
+    how many words are shared.
+    
+    WHY TOKEN OVERLAP IN ADDITION TO NGRAMS:
+    N-grams work at character level.
+    Token overlap works at word level.
+    
+    "Bin Laden" vs "Laden Bin":
+    - Character ngrams: good but not perfect
+    - Token overlap: { "bin","laden" } vs { "laden","bin" }
+      → 2 shared / 2 union = 1.00 ← perfect score
+    
+    Real sanctions names are multi-word.
+    Token overlap handles word reordering perfectly.
+    """
+    
+    # Split into words and make a set
+    # WHY SET: order does not matter, duplicates ignored
+    tokens1 = set(name1.lower().strip().split())
+    tokens2 = set(name2.lower().strip().split())
+    
+    if not tokens1 or not tokens2:
+        return 0.0
+    
+    # Same Jaccard formula — but on words not characters
+    intersection = tokens1 & tokens2
+    union        = tokens1 | tokens2
+    
+    return len(intersection) / len(union)
+
+
+# ============================================================
+# ADD THESE TESTS to your if __name__ == "__main__" block
+# ============================================================
+
+print()
+print("=" * 55)
+print("N-GRAM AND TOKEN OVERLAP TESTS")
+print("=" * 55)
+
+ngram_pairs = [
+    ("Bin Laden",        "Laden Bin"),
+    ("Osama Bin Laden",  "Laden Bin Osama"),
+    ("Rahman",           "Rehman"),
+    ("Abdul Rahman",     "Abdel Rahman"),
+    ("Ali Khan",         "Ahmed Khan"),
+]
+
+for name1, name2 in ngram_pairs:
+    jaccard = jaccard_similarity(name1, name2)
+    token   = token_overlap_similarity(name1, name2)
+    print(f"{name1:20} vs {name2:20}")
+    print(f"  Jaccard(trigram): {jaccard:.2f}  |  Token overlap: {token:.2f}")
+    print()
