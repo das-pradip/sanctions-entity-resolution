@@ -201,3 +201,60 @@ Four rules:
   Splits names into overlapping character chunks
   Catches partial matches that both Levenshtein and
   Soundex miss
+
+  ---
+
+## Day 2 — N-gram Similarity and Token Overlap
+
+### The problem that motivated this algorithm
+"Bin Laden" vs "Laden Bin" — same words, different order
+- Exact match:   False   ← wrong
+- Levenshtein:   0.11    ← wrong
+- Soundex:       fails   ← wrong
+- Token overlap: 1.00    ← correct ✅
+
+Root cause: all previous algorithms treat name as one
+continuous string read left to right. They cannot handle
+reordered tokens.
+
+### How N-grams work
+Sliding window of n characters across a string:
+"laden" trigrams (n=3): { "lad", "ade", "den" }
+
+WHY n=3:
+- n=2 too short: "la" appears in many unrelated names
+- n=3 balanced: specific enough, flexible enough
+- n=4 too strict: one spelling difference kills match
+
+### Jaccard similarity formula
+Jaccard = shared ngrams / total unique ngrams
+Rahman  vs Rehman:
+  shared = { "hma", "man" } = 2
+  union  = 6 total unique trigrams
+  score  = 2/6 = 0.33
+
+### Token overlap
+Splits names into words, measures word-level overlap
+"Bin Laden" vs "Laden Bin":
+  tokens1 = { "bin", "laden" }
+  tokens2 = { "laden", "bin" }
+  shared  = { "bin", "laden" }
+  score   = 2/2 = 1.00
+
+### Two levels needed
+- Character ngrams: single word spelling variants
+  Rahman vs Rehman → 0.33 (partial credit)
+- Token overlap: multi-word reordering
+  Bin Laden vs Laden Bin → 1.00
+
+### Python concepts used
+- set() — unordered collection, no duplicates
+  WHY: order does not matter for overlap calculation
+- & operator — set intersection (shared items)
+- | operator — set union (all unique items)
+- .split() — splits string into list of words
+
+### Critical insight — algorithm comparison table
+No single algorithm gets all cases right.
+Hybrid pipeline combining all algorithms is necessary.
+Each algorithm covers the blind spots of the others.
