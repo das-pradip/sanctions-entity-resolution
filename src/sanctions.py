@@ -576,14 +576,43 @@ def score_records(record1, record2):
 
     # ── Name similarity ──────────────────────────────────
     # Name is always present — if missing, use empty string
-    name1 = record1.get('name') or ''
-    name2 = record2.get('name') or ''
+    # ── Name similarity ──────────────────────────────────
+    # WHY WE CHECK ALIASES:
+    # Two records might have completely different primary names
+    # but share an alias — Abu Bakr Al-Baghdadi is also known as
+    # Ibrahim Awad Ibrahim Al-Badri. If EU uses the birth name
+    # and UN uses the common name, primary name comparison fails.
+    # We check ALL name combinations and take the highest score.
 
-    if name1 and name2:
-        name_score, name_breakdown = score_name_similarity(name1, name2)
-        breakdown['name'] = name_score
-        breakdown['name_detail'] = name_breakdown
-        explanation_parts.append(f"name similarity {name_score:.2f}")
+    name1    = record1.get('name') or ''
+    name2    = record2.get('name') or ''
+    aliases1 = record1.get('aliases', []) or []
+    aliases2 = record2.get('aliases', []) or []
+
+    # Build list of all names for each record
+    all_names1 = [name1] + aliases1 if name1 else aliases1
+    all_names2 = [name2] + aliases2 if name2 else aliases2
+
+    if all_names1 and all_names2:
+        # Try every combination — take highest score
+        # WHY HIGHEST: we want the best evidence available
+        # If any name pair matches strongly — that is evidence
+        best_name_score     = 0.0
+        best_name_breakdown = {}
+
+        for n1 in all_names1:
+            for n2 in all_names2:
+                if n1 and n2:
+                    s, b = score_name_similarity(n1, n2)
+                    if s > best_name_score:
+                        best_name_score     = s
+                        best_name_breakdown = b
+
+        breakdown['name'] = best_name_score
+        breakdown['name_detail'] = best_name_breakdown
+        explanation_parts.append(
+            f"name similarity {best_name_score:.2f}"
+        )
     else:
         breakdown['name'] = None
 
@@ -655,10 +684,45 @@ def score_records(record1, record2):
         final_score = weighted_sum / total_weight_used
 
     # ── Decision ─────────────────────────────────────────
+    # ── Decision ─────────────────────────────────────────
+    # WHY OVERRIDE CONDITIONS:
+    # Pure score thresholds miss edge cases where one field
+    # provides overwhelming evidence despite low overall score.
+    #
+    # OVERRIDE 1 — DOB exact match + country match:
+    # If two records have identical DOB AND same country
+    # they warrant manual review regardless of name similarity.
+    # WHY: DOB exact match is very unlikely by chance.
+    # Combined with country — strong corroborating evidence.
+    # This catches temporal drift cases (name change after marriage)
+    # where name algorithms fail but DOB+country confirm identity.
+    #
+    # OVERRIDE 2 — Passport exact match:
+    # Passport match alone forces manual review minimum.
+    # A passport number is a unique document identifier.
+    # Two records sharing a passport number must be reviewed.
+
+    dob_exact     = breakdown.get('dob') == 1.0
+    country_exact = breakdown.get('country') == 1.0
+    passport_hit  = breakdown.get('passport') == 1.0
+
     if final_score >= 0.85:
         decision = "AUTO BLOCK"
     elif final_score >= 0.65:
         decision = "MANUAL REVIEW"
+    elif dob_exact and country_exact:
+        # Override — DOB + country exact match
+        # forces manual review even with low name score
+        decision = "MANUAL REVIEW"
+        explanation_parts.append(
+            "OVERRIDE: DOB+country exact match"
+        )
+    elif passport_hit:
+        # Override — passport match forces manual review
+        decision = "MANUAL REVIEW"
+        explanation_parts.append(
+            "OVERRIDE: passport exact match"
+        )
     else:
         decision = "CLEAR"
 
