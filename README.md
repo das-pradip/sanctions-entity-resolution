@@ -88,16 +88,17 @@ OFAC / UN / EU Lists
 ## What I Am Building — Phase By Phase
 
 - [x] Phase 0: Understanding the problem and cost of errors
-- [x] Phase 1: Data challenges — transliteration, aliases, 
+- [x] Phase 1: Data challenges — transliteration, aliases,
                missing fields, multi-source conflicts
-- [ ] Phase 2: Algorithm survey — exact match, Levenshtein,
-               phonetic, n-gram, embeddings
+- [x] Phase 2: Algorithm survey — exact match, Levenshtein,
+               phonetic, n-gram, embeddings, combined scorer
+               34 tests passing ✅
 - [ ] Phase 3: Experiment setup with synthetic data
 - [ ] Phase 4: Precision, Recall, F1 metrics
 - [ ] Phase 5: Full system architecture design
 - [ ] Phase 6: Incremental build — one component per session
-- [ ] Phase 7: Explainability — why did the system match these?
-- [ ] Phase 8: Production thinking — 10M records, model drift
+- [ ] Phase 7: Explainability
+- [ ] Phase 8: Production thinking
 
 ---
 
