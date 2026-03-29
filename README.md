@@ -90,14 +90,16 @@ OFAC / UN / EU Lists
 - [x] Phase 0: Understanding the problem and cost of errors
 - [x] Phase 1: Data challenges — transliteration, aliases,
                missing fields, multi-source conflicts
-- [x] Phase 2: Algorithm survey — exact match, Levenshtein,
-               phonetic, n-gram, embeddings, combined scorer
+- [x] Phase 2: Five algorithms + combined scorer
                34 tests passing ✅
-- [ ] Phase 3: Experiment setup with synthetic data
-- [ ] Phase 4: Precision, Recall, F1 metrics
+- [x] Phase 3: Synthetic dataset — 20 records, 10 clusters
+               Blocking — 72% reduction, 100% pair completeness
+- [x] Phase 4: Precision 1.00, Recall 1.00, F1 1.00 ✅
+               Zero missed sanctioned pairs
+               Zero false alarms
 - [ ] Phase 5: Full system architecture design
-- [ ] Phase 6: Incremental build — one component per session
-- [ ] Phase 7: Explainability
+- [ ] Phase 6: Incremental build
+- [ ] Phase 7: Explainability — reason strings
 - [ ] Phase 8: Production thinking
 
 ---
