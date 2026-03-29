@@ -446,7 +446,7 @@ Phase 4: Precision, Recall, F1 metrics
          ---
 
 
-         
+
 
 ## Day 4 — Full Pipeline Evaluation and Metrics
 
@@ -517,3 +517,48 @@ In sanctions: RECALL is non-negotiable
   Missing a sanctioned entity = criminal liability
   False alarms = annoying but recoverable
   Always tune for recall first, precision second
+
+  ---
+
+## Day 5 — Explainability Layer
+
+### Why explainability matters
+A score alone is not enough for compliance.
+Regulators require audit trails showing WHY
+every decision was made — not just what it was.
+Analysts must be able to answer:
+"Why did the system flag these two records?"
+
+### What the explanation now shows
+1. Overall decision and confidence score
+2. Name analysis — every algorithm's contribution
+   Levenshtein, Phonetic, Token overlap, N-gram, Embedding
+3. Field scores — DOB, country, passport
+   With human readable labels:
+   "exact match", "within tolerance", "no match", "NULL"
+4. Override conditions if fired
+   "OVERRIDE: DOB+country exact match"
+5. Required action for the analyst
+   "Send to analyst review queue"
+   "Transaction blocked automatically"
+   "Transaction cleared — audit log created"
+
+### Key example — OFAC-001 vs incoming transaction
+Levenshtein 0.87 — only 2 character differences
+Phonetic 0.80 — sounds almost identical
+DOB 1.00 — identical year
+Country 1.00 — identical country
+Passport NULL — not available on either record
+Decision: MANUAL REVIEW
+
+An analyst reading this immediately understands:
+- Names differ due to transliteration (not different person)
+- DOB and country strongly corroborate the match
+- Passport missing — cannot confirm or deny
+- Human judgment needed before processing
+
+### What I will build next
+Phase 5: Architecture diagram
+Phase 6: Graph construction — linking entities
+         through shared attributes
+Phase 8: Production thinking — scaling to 10M records
