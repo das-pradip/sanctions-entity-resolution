@@ -326,12 +326,18 @@ if __name__ == "__main__":
     print(f"Candidates checked: {len(results)}")
     print()
     print("Top matches:")
+    print()
 
-    for r in results[:5]:
-        print(f"  {r['candidate_id']:10} "
-              f"{r['candidate_name']:35} "
-              f"score: {r['score']:.2f}  "
-              f"{r['decision']}")
+    for r in results[:3]:
+        print(f"  Candidate: {r['candidate_id']} — "
+              f"{r['candidate_name']} ({r['source']})")
+        print()
+        # Print each line of explanation indented
+        for line in r['explanation'].split('\n'):
+            print(f"    {line}")
+        print()
+        print("  " + "-" * 51)
+        print()
 
     # ── Full evaluation against ground truth ─────────────
     print()

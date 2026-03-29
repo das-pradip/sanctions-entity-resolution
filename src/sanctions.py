@@ -727,10 +727,117 @@ def score_records(record1, record2):
         decision = "CLEAR"
 
     # ── Build explanation string ──────────────────────────
-    explanation = (
-        f"Decision: {decision} (score: {final_score:.2f}) | "
-        f"Matched on: {', '.join(explanation_parts)}"
+    # WHY DETAILED EXPLANATION:
+    # A compliance analyst must be able to answer:
+    # "Why did the system say these two records match?"
+    # Regulators require this audit trail.
+    # A score alone is not sufficient — the reasoning must
+    # be documented for every decision made by the system.
+
+    explanation_lines = []
+
+    # Line 1 — Overall decision
+    explanation_lines.append(
+        f"DECISION: {decision} (confidence: {final_score:.2f})"
     )
+
+    # Line 2 — Name analysis
+    name_detail = breakdown.get('name_detail', {})
+    if name_detail:
+        explanation_lines.append(
+            f"NAME ANALYSIS:"
+        )
+        explanation_lines.append(
+            f"  Levenshtein:    {name_detail.get('levenshtein', 0):.2f}"
+            f"  (character edit distance)"
+        )
+        explanation_lines.append(
+            f"  Phonetic:       {name_detail.get('phonetic', 0):.2f}"
+            f"  (sound similarity)"
+        )
+        explanation_lines.append(
+            f"  Token overlap:  {name_detail.get('token_overlap', 0):.2f}"
+            f"  (shared words)"
+        )
+        explanation_lines.append(
+            f"  N-gram:         {name_detail.get('ngram', 0):.2f}"
+            f"  (character chunks)"
+        )
+        explanation_lines.append(
+            f"  Embedding:      {name_detail.get('embedding', 0):.2f}"
+            f"  (semantic meaning)"
+        )
+        explanation_lines.append(
+            f"  Combined name:  {breakdown.get('name', 0):.2f}"
+        )
+
+    # Line 3 — Field by field breakdown
+    explanation_lines.append(f"FIELD SCORES:")
+
+    dob_score = breakdown.get('dob')
+    if dob_score is not None:
+        dob_label = "exact match" if dob_score == 1.0 \
+                    else "within tolerance" if dob_score > 0 \
+                    else "too different"
+        explanation_lines.append(
+            f"  DOB:      {dob_score:.2f}  ({dob_label})"
+        )
+    else:
+        explanation_lines.append(
+            f"  DOB:      NULL  (missing from one or both records"
+            f" — excluded from score)"
+        )
+
+    country_score = breakdown.get('country')
+    if country_score is not None:
+        country_label = "exact match" if country_score == 1.0 \
+                        else "no match"
+        explanation_lines.append(
+            f"  Country:  {country_score:.2f}  ({country_label})"
+        )
+    else:
+        explanation_lines.append(
+            f"  Country:  NULL  (missing — excluded from score)"
+        )
+
+    passport_score = breakdown.get('passport')
+    if passport_score is not None:
+        passport_label = "EXACT MATCH — strong identity signal" \
+                         if passport_score == 1.0 \
+                         else "no match (may have new passport)"
+        explanation_lines.append(
+            f"  Passport: {passport_score:.2f}  ({passport_label})"
+        )
+    else:
+        explanation_lines.append(
+            f"  Passport: NULL  (missing — excluded from score)"
+        )
+
+    # Line 4 — Override conditions if fired
+    for part in explanation_parts:
+        if "OVERRIDE" in part:
+            explanation_lines.append(
+                f"⚠️  {part}"
+            )
+
+    # Line 5 — What the analyst should do
+    if decision == "AUTO BLOCK":
+        explanation_lines.append(
+            "ACTION: Transaction blocked automatically. "
+            "Notify compliance officer."
+        )
+    elif decision == "MANUAL REVIEW":
+        explanation_lines.append(
+            "ACTION: Send to analyst review queue. "
+            "Do not process transaction until reviewed."
+        )
+    else:
+        explanation_lines.append(
+            "ACTION: Transaction cleared. "
+            "Audit log entry created."
+        )
+
+    explanation = "\n".join(explanation_lines)
 
     return final_score, decision, explanation, breakdown
 
