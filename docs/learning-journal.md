@@ -442,3 +442,78 @@ Set — candidate collection
 Phase 4: Precision, Recall, F1 metrics
          Measure how well the full pipeline performs
          against our ground truth answer key
+
+         ---
+
+
+         
+
+## Day 4 — Full Pipeline Evaluation and Metrics
+
+### The journey to perfect metrics
+
+Starting point:
+  Precision: 0.33  False Positives: 20  False Negatives: 2
+
+Bug 1 — Self-comparison:
+  Records were comparing against themselves
+  Fix: skip if candidate_id == transaction id
+  Result: False Positives dropped from 20 to 0
+  Precision: 0.33 → 1.00
+
+Bug 2 — Aliases stripped in pipeline:
+  normalise_for_scoring() was dropping aliases field
+  score_records() alias expansion received empty list
+  Fix: pass aliases through normalise_for_scoring()
+  Result: False Negatives dropped from 2 to 1
+  Recall: 0.83 → 0.92
+
+Bug 3 — Temporal drift not caught:
+  Fatima AL-HASSAN → AL-RASHIDI after marriage
+  Different name, different passport
+  DOB and country identical — but score only 0.60
+  Fix: DOB exact + country exact → override to MANUAL REVIEW
+  Result: False Negatives dropped from 1 to 0
+  Recall: 0.92 → 1.00
+
+Final result:
+  Precision: 1.00 — zero false alarms
+  Recall:    1.00 — zero missed matches
+  F1:        1.00 — perfect
+
+### Key lessons from debugging
+
+Data pipeline bugs are the hardest bugs
+  Each component looked correct individually
+  Bug only appeared when tracing full data flow
+  aliases field dropped between pipeline stages
+  Algorithm never received data it needed
+
+Early exit pattern
+  Skip self-comparison BEFORE any expensive work
+  Never do computation on data you will discard
+
+Override conditions beat pure thresholds
+  DOB exact + country exact = strong evidence
+  Even when name algorithms fail completely
+  One field providing overwhelming evidence
+  should override a low aggregate score
+
+### What Precision, Recall, F1 mean
+
+Precision = of all pairs we flagged, how many correct?
+  1.00 = every flag was a real match
+  0.33 = only 1 in 3 flags was real — analysts overwhelmed
+
+Recall = of all true matches, how many did we catch?
+  1.00 = caught every sanctioned pair
+  0.83 = missed 2 out of 12 — compliance failure
+
+F1 = balance of both
+  1.00 = perfect system
+  Used when you need one number to compare systems
+
+In sanctions: RECALL is non-negotiable
+  Missing a sanctioned entity = criminal liability
+  False alarms = annoying but recoverable
+  Always tune for recall first, precision second
