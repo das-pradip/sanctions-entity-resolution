@@ -377,3 +377,68 @@ NULL-aware scoring is not optional — it is critical.
 - tests/test_matching.py — formal test cases
 - Phase 3: synthetic dataset with real OFAC/UN/EU structure
 - Phase 4: Precision, Recall, F1 metrics
+
+---
+
+## Day 4 — Synthetic Dataset and Blocking
+
+### Why synthetic data
+- Real sanctions data cannot be on public GitHub
+- Synthetic data gives us controlled ground truth
+- We know exactly which records are the same person
+- Ground truth lets us measure precision and recall later
+
+### Dataset structure
+- 20 records across OFAC, UN, EU sources
+- 10 clusters — groups of same person across sources
+- Every real challenge represented:
+  transliteration, missing fields, DOB conflicts,
+  alias explosion, temporal drift, common names
+
+### What blocking does
+Without blocking: 190 pairs to compare (n×(n-1)/2)
+With blocking:    53 pairs to compare
+Reduction:        72.1% fewer comparisons
+
+### How blocking works
+Step 1: Generate blocking keys for every sanctions record
+        - Phonetic key from name and all aliases
+        - Country key
+        - DOB year keys with ±2 tolerance window
+Step 2: Build index — blocking_key → list of record IDs
+        Built ONCE, lookup is O(1) instant
+Step 3: For incoming transaction, generate its blocking keys
+        Look up each key in index
+        Collect all matching record IDs as candidates
+Step 4: Score only the candidates — not all records
+
+### Two blocking quality metrics
+Reduction ratio:   72.1% — eliminated 72% of pairs ✅
+Pair completeness: 100%  — missed zero true matches ✅
+
+### Critical blocking rule
+A blocking rule must NEVER eliminate a true match.
+It can only eliminate impossible candidates.
+Speed without recall is worthless in compliance.
+
+### Why aliases are indexed
+A transaction might use an alias not the primary name.
+If only primary name is indexed — alias transactions
+slip through the blocking step undetected.
+Every alias generates its own blocking keys.
+
+### Data structures used
+Dictionary (hash map) — blocking index
+  key:   blocking key string
+  value: list of record IDs in that bucket
+  WHY:   O(1) lookup — instant candidate retrieval
+
+Set — candidate collection
+  WHY:   automatically deduplicates
+         a record in multiple matching buckets
+         is only scored once
+
+### What I will build next
+Phase 4: Precision, Recall, F1 metrics
+         Measure how well the full pipeline performs
+         against our ground truth answer key
