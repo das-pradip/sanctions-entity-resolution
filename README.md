@@ -87,6 +87,8 @@ OFAC / UN / EU Lists
 
 ## What I Am Building — Phase By Phase
 
+## What I Built — Phase By Phase
+
 - [x] Phase 0: Understanding the problem and cost of errors
 - [x] Phase 1: Data challenges — transliteration, aliases,
                missing fields, multi-source conflicts
@@ -97,10 +99,16 @@ OFAC / UN / EU Lists
 - [x] Phase 4: Precision 1.00, Recall 1.00, F1 1.00 ✅
                Zero missed sanctioned pairs
                Zero false alarms
-- [ ] Phase 5: Full system architecture design
-- [ ] Phase 6: Incremental build
-- [ ] Phase 7: Explainability — reason strings
-- [ ] Phase 8: Production thinking
+- [x] Phase 5: Full system architecture documented ✅
+- [x] Phase 6: All components built:
+               Session 1: Name normaliser ✅
+               Session 2: Blocking function ✅
+               Session 3: Feature vector scoring ✅
+               Session 4: Threshold decisions ✅
+               Session 5: Entity graph ✅
+               Session 6: Analyst review queue ✅
+- [x] Phase 7: Explainability — full analyst reason strings ✅
+- [ ] Phase 8: Production thinking — scaling to 10M records
 
 ---
 
