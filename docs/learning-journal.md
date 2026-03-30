@@ -562,3 +562,49 @@ Phase 5: Architecture diagram
 Phase 6: Graph construction — linking entities
          through shared attributes
 Phase 8: Production thinking — scaling to 10M records
+
+---
+
+## Day 5 — Name Normalisation (Phase 6 Session 1)
+
+### Why normalisation comes first
+Before any comparison — names must be consistent.
+Without normalisation:
+  "USAMA BIN LADEN" vs "Osama  bin  Laden"
+  → different strings → poor matching score
+After normalisation:
+  both → "usama bin laden"
+  → identical → score 1.00
+
+### What the normaliser does in order
+1. Lowercase — "OSAMA" → "osama"
+2. Remove diacritics — "Müller" → "muller"
+   using unidecode library
+3. Strip whitespace — "  Ali  " → "Ali"
+   collapse double spaces → single space
+4. Remove punctuation — "Al-Hassan" → "Al Hassan"
+   hyphens become spaces, not deleted
+5. Transliteration rules — "Abdel" → "abdal"
+   common Arabic variant patterns normalised
+6. Tokenise — "usama bin laden" → ["usama","bin","laden"]
+
+### Similarity improvements measured
+Abdul/Abdel Rahman:  0.92 → 1.00 after normalisation
+AL-HASSAN/Al Hassan: 0.89 → 1.00 after normalisation
+Müller/Muller:       0.83 → 1.00 after normalisation
+Mohammed/Muhammad:   0.75 → 0.71 unchanged
+  WHY unchanged: fundamentally different transliterations
+  phonetic matching handles this case instead
+
+### Key lesson — pipeline order matters
+Normalisation must happen BEFORE scoring.
+Scoring must happen AFTER blocking.
+Each step depends on the previous step being correct.
+Wrong order = wrong results even with correct algorithms.
+
+### Virtual environments — noted for production
+Global pip install is fine for solo learning project.
+Production systems use virtual environments:
+  python -m venv venv
+  Each project has isolated dependencies
+  No version conflicts between projects
