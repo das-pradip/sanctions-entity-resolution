@@ -108,7 +108,12 @@ OFAC / UN / EU Lists
                Session 5: Entity graph ✅
                Session 6: Analyst review queue ✅
 - [x] Phase 7: Explainability — full analyst reason strings ✅
-- [ ] Phase 8: Production thinking — scaling to 10M records
+- [x] Phase 8: Production thinking ✅
+               Scaling: pre-compute embeddings, Kafka queue
+               Drift detection: daily recall monitoring
+               List updates: diff → normalise → reindex → re-screen
+               Retraining: analyst labels → logistic regression
+                           → learned weights replace hardcoded
 
 ---
 
