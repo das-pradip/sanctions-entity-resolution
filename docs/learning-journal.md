@@ -608,3 +608,75 @@ Production systems use virtual environments:
   python -m venv venv
   Each project has isolated dependencies
   No version conflicts between projects
+
+
+
+  ---
+
+## Day 6 — Phase 8: Production Thinking
+
+### Question 1: Scaling to 10M records
+
+Bottleneck: vector embedding computation
+  90MB model + vector math per comparison
+  Cannot run naively at 1M transactions/day
+
+Solutions:
+  Pre-compute embeddings for sanctions records
+  Store vectors — reuse them — never recompute
+  Blocking already reduces comparisons 72%
+  Horizontal scaling — multiple pipeline workers
+  Apache Kafka queue for transaction processing
+  Each worker processes subset in parallel
+
+### Question 2: Drift detection
+
+What drifts:
+  New sanctioned entities added to lists
+  Blocking index becomes stale
+  Analyst decisions shift → thresholds drift
+  Embedding model library updates → scores shift
+
+How to detect before compliance failure:
+  Daily recall measurement on synthetic test set
+  Alert if recall drops below 0.95
+  Monitor manual review queue volume
+  Track analyst rejection rate
+  Diff every new list publication — alert on changes
+
+### Question 3: New list published
+
+Exact sequence required:
+  1. Download new XML — never overwrite old
+  2. Diff new vs old — find added/modified/removed
+  3. Normalise new entries
+  4. Rebuild blocking index — new entries need keys
+  5. Update entity graph — new nodes and edges
+  6. RE-SCREEN last 30 days of transactions ← critical
+     A cleared transaction may match new entry
+  7. Audit log — what changed, when, who triggered
+  8. Alert compliance team with summary
+
+Step 6 is what most systems miss.
+
+### Question 4: Retraining from analyst decisions
+
+500 confirmed matches + 200 rejected false alarms
+= 700 labelled training examples
+
+Pipeline:
+  Extract feature vectors for all 700 pairs
+  [levenshtein, phonetic, token_overlap,
+   ngram, embedding, dob, country, passport]
+  Train logistic regression classifier
+  Model learns optimal weights from real data
+  Replace our hardcoded weights with learned ones
+
+Validation before deployment:
+  80/20 train/validation split
+  Must achieve recall >= 0.99 before deploying
+  Shadow mode — run old and new in parallel 2 weeks
+  Roll back immediately if performance drops
+
+This is active learning — system improves continuously
+from analyst decisions over time.
