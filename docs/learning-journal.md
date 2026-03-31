@@ -680,3 +680,59 @@ Validation before deployment:
 
 This is active learning — system improves continuously
 from analyst decisions over time.
+
+---
+
+## Day 6 — ML Scorer (Logistic Regression)
+
+### Why ML over hardcoded weights
+Hardcoded weights = our best guess = intuition
+ML weights = learned from data = evidence
+
+Our guess vs what model learned:
+  token_overlap:  0.30 → 0.11  we overvalued
+  country_score:  0.15 → 0.28  we undervalued
+  passport_score: 0.25 → 0.00  rarely present in data
+  ngram:          0.15 → 0.15  we got this exactly right
+
+### Why logistic regression not neural network
+- Simple and fast
+- Coefficients are explainable weights
+- Compliance regulators require explainability
+- Works well on small datasets (190 pairs)
+- Neural networks are black boxes — unacceptable
+
+### Training pipeline
+Step 1: Extract feature vectors — 8 numbers per pair
+Step 2: Label each pair — 1=match, 0=not match
+Step 3: 80/20 train/test split
+        WHY: evaluate on data model never saw
+Step 4: Train LogisticRegression(class_weight='balanced')
+        WHY balanced: 12 matches vs 178 non-matches
+        Without balancing model always predicts 0
+Step 5: Evaluate precision and recall on test set
+Step 6: Save model with pickle for reuse
+
+### Results
+Precision: 1.00
+Recall:    1.00
+F1:        1.00
+Safe to deploy ✅
+
+### Key concept — class imbalance
+12 true matches vs 178 non-matches
+Without class_weight='balanced':
+  model learns "always predict not match"
+  gets 178/190 = 94% accuracy but catches nothing
+With class_weight='balanced':
+  model treats both classes equally
+  learns real boundary between match and not match
+
+### Feature vector visualisation
+Bar chart of feature values shows analysts
+exactly which signals drove the decision
+passport = -1 means missing not zero
+model learned to treat -1 differently from 0
+
+### What I will build next
+Real OFAC data ingest — parsing official XML
