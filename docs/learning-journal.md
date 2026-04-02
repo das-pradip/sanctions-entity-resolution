@@ -736,3 +736,51 @@ model learned to treat -1 differently from 0
 
 ### What I will build next
 Real OFAC data ingest — parsing official XML
+
+---
+
+## Day 7 — Real OFAC Data Ingest
+
+### What we built
+src/ingest.py — downloads and parses real US Treasury XML
+  URL: https://www.treasury.gov/ofac/downloads/sdn.xml
+  Format: XML with namespace
+  Records: 18,699 sanctioned entities
+  Fields parsed: name, aliases, DOB, country, passport
+
+### Challenges fixed
+Wrong URL — sanctionslist subdomain vs treasury.gov
+Wrong namespace — had to inspect actual XML tags
+Wrong DOB tag — dobList vs dateOfBirthList
+DOB format — "10 Dec 1948" → extract year "1948"
+
+### Real data statistics
+Total records:  18,699
+With DOB:        7,267 (39%)
+With country:    5,826 (31%)
+With passport:   2,026 (11%)
+With aliases:    9,800 (52%)
+
+### Real pipeline results
+Osama Bin Laden → USAMA BIN MUHAMMAD BIN AWAD BIN LADEN
+  score: 1.00 AUTO BLOCK ✅
+  1,871 candidates checked of 18,699 (90% reduction)
+
+Muammar Gaddafi → MUAMMAR QADHAFI
+  score: 1.00 AUTO BLOCK ✅
+  Different transliteration — system caught it
+
+Ali Hassan (no DOB/passport)
+  12,124 candidates — common name problem
+  Correctly flagged Ali Hassan Al-Majid (Chemical Ali)
+
+John Smith
+  3 matches — all low scores 0.52-0.54
+  No auto-block — correct cautious behaviour
+
+### Key lesson
+Real data confirmed everything we designed:
+  Blocking works at scale
+  Transliteration variants caught
+  Common names need additional fields to disambiguate
+  Missing fields increase candidate pool significantly
